@@ -322,15 +322,6 @@ int parse_uri(char *uri, char *hostname, char *pathname, int *port)
 }
 
 /*
- * format_log_entry - Create a formatted log entry in logstring. 
- * 
- * The inputs are the socket address of the requesting client
- * (sockaddr), the URI from the request (uri), and the size in bytes
- * of the response from the server (size).
- */
-
-
-/*
  * Parse chunked header - Get chunked length from header 
  */
 int parse_chunked_headers(char *chunked_header)
@@ -349,9 +340,8 @@ int parse_chunked_headers(char *chunked_header)
 	return length;
 }
 
-/*************************************
- * Robust I/O routines wrapper for web
- *************************************/
+
+
 void Rio_writen_w(int fd, void *usrbuf, size_t n) 
 {
     if (rio_writen(fd, usrbuf, n) != (long)n)
