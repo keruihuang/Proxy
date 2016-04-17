@@ -30,17 +30,21 @@ FILE *pLog;
  * Function prototypes
  */
 
-void do_Proxy(int fd);
+void do_Proxy(struct task *thread_task);
 void read_headers(rio_t *rp, char *headers, int *length, int *chunked);
 int parse_uri(char *uri, char *target_addr, char *path, int *port);
 int parse_chunked_headers(char *chunked_header);
 static void client_error(int fd, const char *cause, int err_num, const char *short_msg, const char *long_msg);
+
+static char    *create_log_entry(const struct sockaddr_in *sockaddr,
+		    const char *uri, int size);
 
 void *thread(void *vargp);
 void Rio_writen_w(int fd, void *usrbuf, size_t n);
 ssize_t Rio_readnb_w(rio_t *rp, void *usrbuf, size_t n);
 ssize_t Rio_readlineb_w(rio_t *rp, void *usrbuf, size_t maxlen);
 int open_clientfd_ts(char *hostname, int port);
+
 
 /*
  * main
@@ -92,11 +96,12 @@ int main(int argc, char **argv)
     exit(0);
 }
 
+/* Individual thread behavior definition */
 void *thread(void *vargp)
 {
 	Pthread_detach(pthread_self());
 	struct task *thread_task = (struct task *) vargp;
-	do_Proxy(thread_task->fd);
+	do_Proxy(thread_task);
 	close(thread_task->fd);
     Free(vargp);
 	return NULL;
@@ -105,12 +110,16 @@ void *thread(void *vargp)
 /*
  * do_Proxy - handles one HTTP transaction
  */
-void do_Proxy(int fd)
+void do_Proxy(struct task *thread_task)
 {
     int serverfd, port, content_length, chunked_encode, chunked_length, size = 0;
-    char hostname[MAXLINE], pathname[MAXLINE], buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE], logstring[MAXLINE];
+		int fd;
+		char hostname[MAXLINE], pathname[MAXLINE], buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char headers[MAXBUF], request[MAXBUF], response[MAXBUF];
-    rio_t rio_client, rio_server;
+		char *logstring;
+		rio_t rio_client, rio_server;
+
+		fd = thread_task->fd;
 
     /* Read request line and headers */
     Rio_readinitb(&rio_client, fd);
@@ -186,12 +195,18 @@ void do_Proxy(int fd)
 
     /* Write log file */
     P(&log_mutex);
+		logstring = create_log_entry(&thread_task->sockaddr, uri, content_length);
+
+    printf("log entry generated: %s\n", logstring);
 
     fprintf(pLog, "%s\n", logstring);
     V(&log_mutex);
 
     /* Close connection to server */
     close(serverfd);
+
+		/* Free dynamic variables */
+		free(logstring);
 }
 
 /*
@@ -304,7 +319,8 @@ int parse_uri(char *uri, char *hostname, char *pathname, int *port)
     }
 
     /* Extract the host name */
-    host_start = uri + 7;
+    host_start = uri + 7; // since "http://" is 7 characters
+		// locate the first occurrence of :, /, \r, \n or \0
     host_finish = strpbrk(host_start, " :/\r\n\0");
     len = host_finish - host_start;
     strncpy(hostname, host_start, len);
@@ -413,6 +429,60 @@ int open_clientfd_ts(char *hostname, int port)
     return -1;
     return clientfd;
 }
+
+/*
+ * create_log_entry
+ *
+ * Requires:
+ *   The parameter "sockaddr" must point to a valid sockaddr_in structure.  The
+ *   parameter "uri" must point to a properly NUL-terminated string.
+ *
+ * Effects:
+ *   Returns a string containing a properly formatted log entry.  This log
+ *   entry is based upon the socket address of the requesting client
+ *   ("sockaddr"), the URI from the request ("uri"), and the size in bytes of
+ *   the response from the server ("size").
+ */
+static char *
+create_log_entry(const struct sockaddr_in *sockaddr, const char *uri, int size)
+{
+
+	/*
+	 * Create a large enough array of characters to store a log entry.
+	 * Although the length of the URI can exceed MAXLINE, the combined
+	 * lengths of the other fields and separators cannot.
+	 */
+	const size_t log_maxlen = MAXLINE + strlen(uri);
+	char *const log_str = Malloc(log_maxlen + 1);
+
+	/* Get a formatted time string. */
+	time_t now = time(NULL);
+	int log_strlen = strftime(log_str, MAXLINE, "%a %d %b %Y %H:%M:%S %Z: ",
+	    localtime(&now));
+
+	/*
+	 * Convert the IP address in network byte order to dotted decimal
+	 * form.
+	 */
+	Inet_ntop(AF_INET, &sockaddr->sin_addr, &log_str[log_strlen],
+	    INET_ADDRSTRLEN);
+	log_strlen += strlen(&log_str[log_strlen]);
+
+	/*
+	 * Assert that the time and IP address fields occupy less than half of
+	 * the space that is reserved for the non-URI fields.
+	 */
+	assert(log_strlen < MAXLINE / 2);
+
+	/*
+	 * Add the URI and response size onto the end of the log entry.
+	 */
+	snprintf(&log_str[log_strlen], log_maxlen - log_strlen, " %s %d", uri,
+	    size);
+
+	return (log_str);
+}
+
 /*
  * The last lines of this file configure the behavior of the "Tab" key in
  * emacs.  Emacs has a rudimentary understanding of C syntax and style.  In
