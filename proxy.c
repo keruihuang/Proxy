@@ -2,30 +2,31 @@
  * proxy.c - COMP 321 Web proxy
  *
  * TEAM MEMBERS:
- *     John Q. Student, jqs@rice.edu 
+ *     John Q. Student, jqs@rice.edu
  *     Jane R. Student, jrs@rice.edu
- */ 
+ */
 
 #include "csapp.h"
+#include <assert.h>
 
 /*
  * Function prototypes
  */
-static void	client_error(int fd, const char *cause, int err_num, 
+static void	client_error(int fd, const char *cause, int err_num,
 		    const char *short_msg, const char *long_msg);
 static char    *create_log_entry(const struct sockaddr_in *sockaddr,
 		    const char *uri, int size);
 static int	parse_uri(const char *uri, char **hostnamep, char **portp,
 		    char **pathnamep);
 
-/* 
+/*
  * main
  *
  * Requires:
- *   <to be filled in by the student(s)> 
+ *   <to be filled in by the student(s)>
  *
  * Effects:
- *   <to be filled in by the student(s)> 
+ *   <to be filled in by the student(s)>
  */
 int
 main(int argc, char **argv)
@@ -43,7 +44,7 @@ main(int argc, char **argv)
 
 /*
  * parse_uri
- * 
+ *
  * Requires:
  *   The parameter "uri" must point to a properly NUL-terminated string.
  *
@@ -168,7 +169,7 @@ create_log_entry(const struct sockaddr_in *sockaddr, const char *uri, int size)
  *
  * Requires:
  *   The parameter "fd" must be an open socket that is connected to the client.
- *   The parameters "cause", "short_msg", and "long_msg" must point to properly 
+ *   The parameters "cause", "short_msg", and "long_msg" must point to properly
  *   NUL-terminated strings that describe the reason why the HTTP transaction
  *   failed.  The string "short_msg" may not exceed 32 characters in length,
  *   and the string "long_msg" may not exceed 80 characters in length.
