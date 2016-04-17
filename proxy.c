@@ -77,7 +77,7 @@ int main(int argc, char **argv)
     pLog = fopen("proxy.log", "a");
 
     /* Listen */
-    listenfd = Open_listenfd(port);
+    listenfd = Open_listenfd(argv[1]);
     printf("Proxy is running...\n");
     while (1) {
         clientlen = sizeof(clientaddr);
