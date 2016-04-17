@@ -9,6 +9,9 @@
 #include "csapp.h"
 #include <assert.h>
 
+#define BUF_SIZE 128	/* Per-connection internal buffer size. */
+
+
 /*
  * Function prototypes
  */
@@ -31,12 +34,20 @@ static int	parse_uri(const char *uri, char **hostnamep, char **portp,
 int
 main(int argc, char **argv)
 {
+	char* sscanned_str;
 
 	/* Check the arguments. */
 	if (argc != 2) {
 		fprintf(stderr, "Usage: %s <port number>\n", argv[0]);
 		exit(0);
 	}
+
+	/*
+	TODO: Read input from socket and process it by parsing the uri and request
+	body.
+	*/
+
+//	read(STDIN_FILENO, )
 
 	/* Return success. */
 	return (0);
