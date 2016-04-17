@@ -77,8 +77,6 @@ int main(int argc, char **argv)
     Signal(SIGPIPE, SIG_IGN);
 
 
-    /* Open log file */
-    pLog = fopen("proxy.log", "a");
 
     /* Listen */
     listenfd = Open_listenfd(argv[1]);
@@ -195,11 +193,15 @@ void do_Proxy(struct task *thread_task)
 
     /* Write log file */
     P(&log_mutex);
-		logstring = create_log_entry(&thread_task->sockaddr, uri, content_length);
 
+    /* Open log file */
+    pLog = fopen("proxy.log", "a");
+
+		logstring = create_log_entry(&thread_task->sockaddr, uri, size);
     printf("log entry generated: %s\n", logstring);
 
     fprintf(pLog, "%s\n", logstring);
+    fclose(pLog);
     V(&log_mutex);
 
     /* Close connection to server */
