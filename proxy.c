@@ -121,8 +121,10 @@ void do_Proxy(struct task *thread_task)
 
     /* Read request line and headers */
     Rio_readinitb(&rio_client, fd);
-    if (Rio_readlineb_w(&rio_client, buf, MAXLINE) <= 0)
-    	return;
+    if (Rio_readlineb_w(&rio_client, buf, MAXLINE) <= 0) {
+			printf("bogus, returning\n");
+			return;
+		}
 
     /* Get request type*/
     sscanf(buf, "%s %s %s", method, uri, version);
@@ -161,19 +163,19 @@ void do_Proxy(struct task *thread_task)
 
     /* Send response content to the client */
     if (chunked_encode) {	                      /* Encode with chunk */
-    	Rio_readlineb_w(&rio_server, buf, MAXLINE);
-    	Rio_writen_w(fd, buf, strlen(buf));
+			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
+			Rio_writen_w(fd, buf, strlen(buf));
     	while ((chunked_length = parse_chunked_headers(buf)) > 0) {
             size += chunked_length;
     		Rio_readnb_w(&rio_server, buf, chunked_length);
     		Rio_writen_w(fd, buf, chunked_length);
-    		Rio_readlineb_w(&rio_server, buf, MAXLINE);
+    		if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
     		Rio_writen_w(fd, buf, strlen(buf));
-    		Rio_readlineb_w(&rio_server, buf, MAXLINE);
-    		Rio_writen_w(fd, buf, strlen(buf));
+				if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
+				Rio_writen_w(fd, buf, strlen(buf));
     	}
-    	Rio_readlineb_w(&rio_server, buf, MAXLINE);
-    	Rio_writen_w(fd, buf, strlen(buf));
+			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
+			Rio_writen_w(fd, buf, strlen(buf));
     } else if (content_length > 0) {				/* Define length with Content-length */
         size += content_length;
         int left_length = content_length;
@@ -184,7 +186,7 @@ void do_Proxy(struct task *thread_task)
             Rio_readnb_w(&rio_server, buf, handle_length);
             Rio_writen_w(fd, buf, handle_length);
         }
-    } else {                                        /* Define length with closing connection */
+    } else { /* Define length with closing connection */
     	while ((chunked_length = Rio_readlineb_w(&rio_server, buf, MAXBUF)) > 0) {
             size += chunked_length;
     		Rio_writen_w(fd, buf, chunked_length);
@@ -276,12 +278,12 @@ client_error(int fd, const char *cause, int err_num, const char *short_msg,
     char buf[MAXLINE];
     *length = *chunked = 0;
 
-    Rio_readlineb_w(rp, buf, MAXLINE);
-    strcpy(content, buf);
+		if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) return;
+		strcpy(content, buf);
     strcat(content, "Connection: close\r\n");
     while (strcmp(buf, "\r\n")) {
-        Rio_readlineb_w(rp, buf, MAXLINE);
-        /* Get 'Content-Length:' */
+				if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) return;
+				/* Get 'Content-Length:' */
         if (strncasecmp(buf, "Content-Length:", 15) == 0)
             *length = atoi(buf + 15);
         /* Get 'Transfer-Encoding: chunked' */
