@@ -154,6 +154,12 @@ void do_Proxy(struct task *thread_task, const int reqnum)
 		Inet_ntop(AF_INET, &sockaddr->sin_addr, client_ip_dec, INET_ADDRSTRLEN);
 		printf("Request %d: Received request from %s:\n",
 							reqnum, client_ip_dec);
+		printf("%s%s", buf, headers);
+		printf("*** End of Request ***\n");
+
+		if (strcmp(method, "GET") != 0) {
+			printf("Request %d: Received non-GET request\n", reqnum);
+		}
 
     /* Build HTTP request */
     sprintf(request, "%s /%s %s\r\n%s", method, pathname, version, headers);
@@ -166,6 +172,9 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     	Rio_readnb_w(&rio_client, buf, content_length);
     	Rio_writen_w(serverfd, buf, content_length);
     }
+
+
+		/** Handle Responses **/
 
     /* Get response header */
     Rio_readinitb(&rio_server, serverfd);
