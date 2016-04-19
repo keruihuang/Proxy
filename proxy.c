@@ -23,6 +23,9 @@ struct task {
 static sem_t open_clientfd_mutex;
 static sem_t log_mutex;
 
+/* Request counter */
+static int reqcount;
+
 /* Log file */
 FILE *pLog;
 
@@ -30,7 +33,7 @@ FILE *pLog;
  * Function prototypes
  */
 
-void do_Proxy(struct task *thread_task);
+void do_Proxy(struct task *thread_task, const int reqnum);
 void read_headers(rio_t *rp, char *headers, int *length, int *chunked);
 int parse_uri(char *uri, char *target_addr, char *path, int *port);
 int parse_chunked_headers(char *chunked_header);
@@ -99,7 +102,7 @@ void *thread(void *vargp)
 {
 	Pthread_detach(pthread_self());
 	struct task *thread_task = (struct task *) vargp;
-	do_Proxy(thread_task);
+	do_Proxy(thread_task, reqcount++);
 	close(thread_task->fd);
     Free(vargp);
 	return NULL;
@@ -108,7 +111,7 @@ void *thread(void *vargp)
 /*
  * do_Proxy - handles one HTTP transaction
  */
-void do_Proxy(struct task *thread_task)
+void do_Proxy(struct task *thread_task, const int reqnum)
 {
     int serverfd, port, content_length, chunked_encode, chunked_length, size = 0;
 		int fd;
@@ -118,6 +121,12 @@ void do_Proxy(struct task *thread_task)
 		rio_t rio_client, rio_server;
 
 		fd = thread_task->fd;
+
+		/* Client tracking */
+		char client_ip_dec[INET_ADDRSTRLEN]; // client's IP address string
+		struct sockaddr_in *sockaddr = &thread_task->sockaddr; // client's socket
+
+		// printf("reqnum: %d\n", reqnum);
 
     /* Read request line and headers */
     Rio_readinitb(&rio_client, fd);
@@ -141,6 +150,10 @@ void do_Proxy(struct task *thread_task)
         client_error(fd, uri, 502, "Proxy error", "Proxy doesn't implement this uri");
         return;
     }
+
+		Inet_ntop(AF_INET, &sockaddr->sin_addr, client_ip_dec, INET_ADDRSTRLEN);
+		printf("Request %d: Received request from %s:\n",
+							reqnum, client_ip_dec);
 
     /* Build HTTP request */
     sprintf(request, "%s /%s %s\r\n%s", method, pathname, version, headers);
@@ -199,7 +212,7 @@ void do_Proxy(struct task *thread_task)
     /* Open log file */
     pLog = fopen("proxy.log", "a");
 
-		logstring = create_log_entry(&thread_task->sockaddr, uri, size);
+		logstring = create_log_entry(sockaddr, uri, size);
     printf("log entry generated: %s\n", logstring);
 
     fprintf(pLog, "%s\n", logstring);
