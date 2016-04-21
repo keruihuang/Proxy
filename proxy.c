@@ -4,6 +4,7 @@
  * TEAM NAME: Kamehameha
  * TEAM MEMBERS:
  *     Kerui Huang, kh24@rice.edu
+ *     Nam Hee Kim, nk17@rice.edu
  *
  */
 
@@ -43,11 +44,10 @@ static char    *create_log_entry(const struct sockaddr_in *sockaddr,
 		    const char *uri, int size);
 
 void *thread(void *vargp);
-void Rio_writen_w(int fd, void *usrbuf, size_t n);
+ssize_t Rio_writen_w(int fd, void *usrbuf, size_t n);
 ssize_t Rio_readnb_w(rio_t *rp, void *usrbuf, size_t n);
 ssize_t Rio_readlineb_w(rio_t *rp, void *usrbuf, size_t maxlen);
 int open_clientfd_ts(char *hostname, int port);
-
 
 /*
  * main
@@ -78,7 +78,6 @@ int main(int argc, char **argv)
 
     /* Ignore SIGPIPE signals */
     Signal(SIGPIPE, SIG_IGN);
-
 
 
     /* Listen */
@@ -165,9 +164,13 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     sprintf(request, "%s /%s %s\r\n%s", method, pathname, version, headers);
 
     /* Send HTTP resquest to the web server */
-    if ((serverfd = open_clientfd_ts(hostname, port)) == -1)
-    	return;
-    Rio_writen_w(serverfd, request, strlen(request));
+    if ((serverfd = open_clientfd_ts(hostname, port)) == -1) {
+			return;
+		}
+    if (Rio_writen_w(serverfd, request, strlen(request)) < 0) {
+			client_error(fd, uri, 504, "Gateway Timeout",
+											"Unrecognized host name or port");
+		}
     if (strcmp(method, "POST") == 0) {	/* POST request */
     	Rio_readnb_w(&rio_client, buf, content_length);
     	Rio_writen_w(serverfd, buf, content_length);
@@ -185,18 +188,30 @@ void do_Proxy(struct task *thread_task, const int reqnum)
 
     /* Send response content to the client */
     if (chunked_encode) {	                      /* Encode with chunk */
-			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
+			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
+				printf("error after chunked encode\n");
+				return;
+			}
 			Rio_writen_w(fd, buf, strlen(buf));
     	while ((chunked_length = parse_chunked_headers(buf)) > 0) {
             size += chunked_length;
     		Rio_readnb_w(&rio_server, buf, chunked_length);
     		Rio_writen_w(fd, buf, chunked_length);
-    		if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
+    		if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
+					printf("error after first one in the while loop\n");
+					return;
+				}
     		Rio_writen_w(fd, buf, strlen(buf));
-				if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
+				if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
+					printf("error after second one in the while loop\n");
+					return;
+				}
 				Rio_writen_w(fd, buf, strlen(buf));
     	}
-			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) return;
+			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
+				printf("error after third one in the while loop\n");
+				return;
+			}
 			Rio_writen_w(fd, buf, strlen(buf));
     } else if (content_length > 0) {				/* Define length with Content-length */
         size += content_length;
@@ -300,11 +315,17 @@ client_error(int fd, const char *cause, int err_num, const char *short_msg,
     char buf[MAXLINE];
     *length = *chunked = 0;
 
-		if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) return;
+		if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) {
+			printf("error while reading header\n");
+			return;
+		}
 		strcpy(content, buf);
     strcat(content, "Connection: close\r\n");
     while (strcmp(buf, "\r\n")) {
-				if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) return;
+				if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) {
+					printf("error in the header's while loop\n");
+					return;
+				}
 				/* Get 'Content-Length:' */
         if (strncasecmp(buf, "Content-Length:", 15) == 0)
             *length = atoi(buf + 15);
@@ -390,10 +411,13 @@ int parse_chunked_headers(char *chunked_header)
 
 
 
-void Rio_writen_w(int fd, void *usrbuf, size_t n)
+ssize_t Rio_writen_w(int fd, void *usrbuf, size_t n)
 {
-    if (rio_writen(fd, usrbuf, n) != (long)n)
+    if (rio_writen(fd, usrbuf, n) != (long)n) {
         fprintf(stderr, "Rio_writen_w error: %s\n", strerror(errno));
+				return (-1);
+		}
+		return n;
 }
 
 ssize_t Rio_readnb_w(rio_t *rp, void *usrbuf, size_t n)
