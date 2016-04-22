@@ -63,6 +63,8 @@ int main(int argc, char **argv)
     int listenfd, connfd, port;
     socklen_t clientlen;
     pthread_t tid;
+
+		// pid_t pid;
     struct sockaddr_in clientaddr;
 
     /* Check arguments */
@@ -84,14 +86,14 @@ int main(int argc, char **argv)
     listenfd = Open_listenfd(argv[1]);
     printf("Proxy is running...\n");
     while (1) {
-        clientlen = sizeof(clientaddr);
-        connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
-        /* Pass args */
-        struct task *vargp= (struct task *) Malloc(sizeof(struct task));
-        vargp->fd = connfd;
-        vargp->sockaddr = clientaddr;
-        /* Create thread */
-        Pthread_create(&tid, NULL, thread, vargp);
+      clientlen = sizeof(clientaddr);
+      connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+			/* Pass args */
+      struct task *vargp= (struct task *) Malloc(sizeof(struct task));
+      vargp->fd = connfd;
+      vargp->sockaddr = clientaddr;
+			/* Create thread */
+      Pthread_create(&tid, NULL, thread, vargp);
     }
     exit(0);
 }
@@ -103,8 +105,8 @@ void *thread(void *vargp)
 	struct task *thread_task = (struct task *) vargp;
 	do_Proxy(thread_task, reqcount++);
 	close(thread_task->fd);
-    Free(vargp);
-	return NULL;
+  Free(vargp);
+	return(NULL);
 }
 
 /*
@@ -130,8 +132,7 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     /* Read request line and headers */
     Rio_readinitb(&rio_client, fd);
     if (Rio_readlineb_w(&rio_client, buf, MAXLINE) <= 0) {
-			printf("bogus, returning\n");
-			return;
+			printf("EOF reached.\n");
 		}
 
     /* Get request type*/
@@ -168,13 +169,20 @@ void do_Proxy(struct task *thread_task, const int reqnum)
 			return;
 		}
     if (Rio_writen_w(serverfd, request, strlen(request)) < 0) {
+			/* Writing to server fails */
 			client_error(fd, uri, 504, "Gateway Timeout",
 											"Unrecognized host name or port");
+			close(serverfd);
+			return;
 		}
     if (strcmp(method, "POST") == 0) {	/* POST request */
     	Rio_readnb_w(&rio_client, buf, content_length);
     	Rio_writen_w(serverfd, buf, content_length);
     }
+
+		/** End of Request Handling **/
+
+
 
 
 		/** Handle Responses **/
@@ -190,26 +198,30 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     if (chunked_encode) {	                      /* Encode with chunk */
 			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
 				printf("error after chunked encode\n");
+				close(serverfd);
 				return;
 			}
 			Rio_writen_w(fd, buf, strlen(buf));
     	while ((chunked_length = parse_chunked_headers(buf)) > 0) {
-            size += chunked_length;
+        size += chunked_length;
     		Rio_readnb_w(&rio_server, buf, chunked_length);
     		Rio_writen_w(fd, buf, chunked_length);
     		if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
 					printf("error after first one in the while loop\n");
+					close(serverfd);
 					return;
 				}
     		Rio_writen_w(fd, buf, strlen(buf));
 				if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
 					printf("error after second one in the while loop\n");
+					close(serverfd);
 					return;
 				}
 				Rio_writen_w(fd, buf, strlen(buf));
     	}
 			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
 				printf("error after third one in the while loop\n");
+				close(serverfd);
 				return;
 			}
 			Rio_writen_w(fd, buf, strlen(buf));
@@ -218,17 +230,23 @@ void do_Proxy(struct task *thread_task, const int reqnum)
         int left_length = content_length;
         int handle_length = 0;
     	while (left_length > 0) {
-            handle_length = left_length > MAXBUF ? MAXBUF : left_length;
-            left_length -= handle_length;
-            Rio_readnb_w(&rio_server, buf, handle_length);
-            Rio_writen_w(fd, buf, handle_length);
-        }
+        handle_length = left_length > MAXBUF ? MAXBUF : left_length;
+        left_length -= handle_length;
+        Rio_readnb_w(&rio_server, buf, handle_length);
+        Rio_writen_w(fd, buf, handle_length);
+				printf("Request %d: Forwarded %d bytes from end server to client\n",
+								reqnum, handle_length);
+      }
     } else { /* Define length with closing connection */
-    	while ((chunked_length = Rio_readlineb_w(&rio_server, buf, MAXBUF)) > 0) {
-            size += chunked_length;
-    		Rio_writen_w(fd, buf, chunked_length);
-        }
+		  	while ((chunked_length = Rio_readlineb_w(&rio_server, buf, MAXBUF)) > 0) {
+					size += chunked_length;
+		  		Rio_writen_w(fd, buf, chunked_length);
+					printf("Request %d: Forwarded %d bytes from end server to client\n",
+									reqnum, chunked_length);
+		    }
     }
+
+
 
     /* Write log file */
     P(&log_mutex);
@@ -248,6 +266,7 @@ void do_Proxy(struct task *thread_task, const int reqnum)
 
 		/* Free dynamic variables */
 		free(logstring);
+
 }
 
 /*
