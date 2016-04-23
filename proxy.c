@@ -194,6 +194,7 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     /* Send HTTP response to the client */
     Rio_writen_w(fd, response, strlen(response));
 
+
     /* Send response content to the client */
     if (chunked_encode) {	                      /* Encode with chunk */
 			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
@@ -206,7 +207,7 @@ void do_Proxy(struct task *thread_task, const int reqnum)
         size += chunked_length;
     		Rio_readnb_w(&rio_server, buf, chunked_length);
     		Rio_writen_w(fd, buf, chunked_length);
-    		if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
+				if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
 					printf("error after first one in the while loop\n");
 					close(serverfd);
 					return;
@@ -218,6 +219,9 @@ void do_Proxy(struct task *thread_task, const int reqnum)
 					return;
 				}
 				Rio_writen_w(fd, buf, strlen(buf));
+				printf("Request %d: Forwarded %lu bytes from end server to client\n",
+								reqnum, strlen(buf));
+
     	}
 			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
 				printf("error after third one in the while loop\n");
@@ -234,15 +238,11 @@ void do_Proxy(struct task *thread_task, const int reqnum)
         left_length -= handle_length;
         Rio_readnb_w(&rio_server, buf, handle_length);
         Rio_writen_w(fd, buf, handle_length);
-				printf("Request %d: Forwarded %d bytes from end server to client\n",
-								reqnum, handle_length);
       }
     } else { /* Define length with closing connection */
 		  	while ((chunked_length = Rio_readlineb_w(&rio_server, buf, MAXBUF)) > 0) {
 					size += chunked_length;
 		  		Rio_writen_w(fd, buf, chunked_length);
-					printf("Request %d: Forwarded %d bytes from end server to client\n",
-									reqnum, chunked_length);
 		    }
     }
 
@@ -339,6 +339,7 @@ client_error(int fd, const char *cause, int err_num, const char *short_msg,
 			return;
 		}
 		strcpy(content, buf);
+		// tack on the connection: closed as per HTTP/1.1
     strcat(content, "Connection: close\r\n");
     while (strcmp(buf, "\r\n")) {
 				if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) {
