@@ -491,6 +491,12 @@ int parse_uri(char *uri, char *hostname, char *pathname, int *port)
 
 /*
  * Parse chunked header - Get chunked length from header
+		Requires:
+			"chunked_header" points to a valid response header
+
+		Effects:
+			Reads in the header and adds the lengths the chunked header remakrs.
+			Returns the total length.
  */
 int parse_chunked_headers(char *chunked_header)
 {
@@ -684,7 +690,13 @@ struct List* list_create(void)
 }
 
 /*
+	List insertion
+	Requires:
+		"lp" must point to a valid list.
+		"newelem" must point to a valid dynamically allocated string.
 
+	Effects:
+		Insert a new element containing string to the end of the list.
 */
 void list_insert(struct List* lp, char* newelem)
 {
@@ -706,6 +718,16 @@ void list_insert(struct List* lp, char* newelem)
 	cur->next = new_list;
 }
 
+/*
+	List destruction
+
+	Requires:
+		"lp" points to a valid dynamically constructed struct List
+
+	Effects:
+		Frees the variables involved including the list itself.
+*/
+
 void list_destroy(struct List* lp)
 {
 	if (lp->next != NULL) {
@@ -718,6 +740,19 @@ void list_destroy(struct List* lp)
 		free(lp);
 	}
 }
+
+/*
+	Total string concatenation
+
+	Requires:
+		"lp" must point to a valid list of the type struct List
+
+	Effects:
+		Iterates over the list and concatenates the whole list into
+		one big string. This is our proposed solution for handling
+		exceptionally long request strings.
+
+*/
 
 char* list_totalstring(struct List* lp)
 {
