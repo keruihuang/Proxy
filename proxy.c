@@ -265,7 +265,7 @@ void do_Proxy(struct task *thread_task, const int reqnum)
 
     /* Send HTTP response to the client */
     Rio_writen_w(fd, response, strlen(response));
-
+		size = strlen(response);
 
     /* Send response content to the client */
     if (chunked_encode) {
@@ -306,13 +306,12 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     } else if (content_length > 0) {
 				/* Define length with Content-length */
 				printf("Content-length case\n");
-        size += content_length;
         int left_length = content_length;
         int handle_length = 0;
     	while (left_length > 0) {
         handle_length = left_length > MAXBUF ? MAXBUF : left_length;
         left_length -= handle_length;
-
+				size += handle_length;
 				Rio_readnb_w(&rio_server, buf, handle_length);
         Rio_writen_w(fd, buf, handle_length);
       }
