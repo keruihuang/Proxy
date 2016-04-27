@@ -115,17 +115,13 @@ int main(int argc, char **argv)
 }
 
 /*
-
 	Individual thread behavior definition
-
 	Requires:
 		"vargp" must point to a valid argument structure,
 		namely "struct task."
-
 	Effects:
 		For this thread, execute the proxy task, close all open file descriptors,
 		free the argument object, and terminate the thread.
-
 */
 void *thread(void *vargp)
 {
@@ -139,12 +135,10 @@ void *thread(void *vargp)
 
 /*
  * do_Proxy - handles one HTTP transaction
-
 	Requires:
 		"thread_task" must be a valid argument object.
 		"reqnum" must be an integer greater than 0, identifying the request
 		this thread deals with 1-on-1.
-
 	Effects:
 		Execute the proxy task by
 			1. reading in the input request
@@ -152,7 +146,6 @@ void *thread(void *vargp)
 			3. retrieving the response
 			4. delivering the response to the client
 		and then log the result.
-
  */
 void do_Proxy(struct task *thread_task, const int reqnum)
 {
@@ -223,15 +216,14 @@ void do_Proxy(struct task *thread_task, const int reqnum)
         return;
     }
 
-		Inet_ntop(AF_INET, &sockaddr->sin_addr, client_ip_dec, INET_ADDRSTRLEN);
-		printf("Request %d: Received request from %s:\n",
-							reqnum, client_ip_dec);
-		printf("%s%s", buf, headers);
-		printf("*** End of Request ***\n");
+	Inet_ntop(AF_INET, &sockaddr->sin_addr, client_ip_dec, INET_ADDRSTRLEN);
+	printf("Request %d: Received request from %s:\n", reqnum, client_ip_dec);
+	printf("%s%s", buf, headers);
+	printf("*** End of Request ***\n");
 
-		if (strcmp(method, "GET") != 0) {
-			printf("Request %d: Received non-GET request\n", reqnum);
-		}
+	if (strcmp(method, "GET") != 0) {
+		printf("Request %d: Received non-GET request\n", reqnum);
+	}
 
     /* Build HTTP request */
     sprintf(request, "%s /%s %s\r\n%s", method, pathname, version, headers);
@@ -239,14 +231,15 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     /* Send HTTP resquest to the web server */
     if ((serverfd = open_clientfd_ts(hostname, port)) == -1) {
 			return;
-		}
+	}
+		
     if (Rio_writen_w(serverfd, request, strlen(request)) < 0) {
-			/* Writing to server fails */
-			client_error(fd, uri, 504, "Gateway Timeout",
-											"Unrecognized host name or port");
-			close(serverfd);
-			return;
-		}
+		/* Writing to server fails */
+		client_error(fd, uri, 504, "Gateway Timeout", "Unrecognized host name or port");
+		close(serverfd);
+		return;
+	}
+	
     if (strcmp(method, "POST") == 0) {	/* POST request */
     	Rio_readnb_w(&rio_client, buf, content_length);
     	Rio_writen_w(serverfd, buf, content_length);
@@ -270,32 +263,30 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     /* Send response content to the client */
     if (chunked_encode) {
       /* Encode with chunk */
-			printf("chunked case\n");
+		printf("chunked case\n");
+		if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
+			printf("error after chunked encode\n");
+			close(serverfd);
+			return;
+		}
+		Rio_writen_w(fd, buf, strlen(buf));
+    	while ((chunked_length = parse_chunked_headers(buf)) > 0) {
+			size += chunked_length;
+    		Rio_readnb_w(&rio_server, buf, chunked_length);
+			printf("chunk fd: %d\n", fd);
+			Rio_writen_w(fd, buf, chunked_length);
 			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
-				printf("error after chunked encode\n");
+				printf("error after first one in the while loop\n");
+				close(serverfd);
+				return;
+			}
+    		Rio_writen_w(fd, buf, strlen(buf));
+			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
+				printf("error after second one in the while loop\n");
 				close(serverfd);
 				return;
 			}
 			Rio_writen_w(fd, buf, strlen(buf));
-    	while ((chunked_length = parse_chunked_headers(buf)) > 0) {
-        size += chunked_length;
-    		Rio_readnb_w(&rio_server, buf, chunked_length);
-				printf("chunk fd: %d\n", fd);
-				Rio_writen_w(fd, buf, chunked_length);
-				if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
-					printf("error after first one in the while loop\n");
-					close(serverfd);
-					return;
-				}
-    		Rio_writen_w(fd, buf, strlen(buf));
-				if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
-					printf("error after second one in the while loop\n");
-					close(serverfd);
-					return;
-				}
-				Rio_writen_w(fd, buf, strlen(buf));
-
-
     	}
 			if (Rio_readlineb_w(&rio_server, buf, MAXLINE) <= 0) {
 				printf("error after third one in the while loop\n");
@@ -303,35 +294,35 @@ void do_Proxy(struct task *thread_task, const int reqnum)
 				return;
 			}
 			Rio_writen_w(fd, buf, strlen(buf));
-    } else if (content_length > 0) {
-				/* Define length with Content-length */
-				printf("Content-length case\n");
+    } 
+	else if (content_length > 0) {
+		/* Define length with Content-length */
+		printf("Content-length case\n");
         int left_length = content_length;
         int handle_length = 0;
     	while (left_length > 0) {
         handle_length = left_length > MAXBUF ? MAXBUF : left_length;
         left_length -= handle_length;
-				size += handle_length;
-				Rio_readnb_w(&rio_server, buf, handle_length);
+		size += handle_length;
+		Rio_readnb_w(&rio_server, buf, handle_length);
         Rio_writen_w(fd, buf, handle_length);
       }
-    } else { /* Define length with closing connection */
-		  	while ((chunked_length =
-					Rio_readlineb_w(&rio_server, buf, MAXBUF)) > 0) {
-						size += chunked_length;
-			  		Rio_writen_w(fd, buf, chunked_length);
-		    }
+    } 
+	else { /* Define length with closing connection */
+		while ((chunked_length = Rio_readlineb_w(&rio_server, buf, MAXBUF)) > 0) {
+			size += chunked_length;
+			  Rio_writen_w(fd, buf, chunked_length);
+		}
     }
 
-		printf("Request %d: Forwarded %d bytes from end server to client\n",
-						reqnum, size);
+	printf("Request %d: Forwarded %d bytes from end server to client\n", reqnum, size);
 
     /* Write log file */
     P(&log_mutex);
 
     /* Open log file */
     pLog = fopen("proxy.log", "a");
-		logstring = create_log_entry(sockaddr, uri, size);
+	logstring = create_log_entry(sockaddr, uri, size);
     printf("log entry generated: %s\n", logstring);
 
     fprintf(pLog, "%s\n", logstring);
@@ -341,8 +332,8 @@ void do_Proxy(struct task *thread_task, const int reqnum)
     /* Close connection to server */
     close(serverfd);
 
-		/* Free dynamic variables */
-		free(logstring);
+	/* Free dynamic variables */
+	free(logstring);
 
 }
 
@@ -412,19 +403,20 @@ client_error(int fd, const char *cause, int err_num, const char *short_msg,
     char buf[MAXLINE];
     *length = *chunked = 0;
 
-		if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) {
-			printf("error while reading header\n");
-			return;
-		}
-		strcpy(content, buf);
-		// tack on the connection: closed as per HTTP/1.1
+	if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) {
+		printf("error while reading header\n");
+		return;
+	}
+	strcpy(content, buf);
+	
+	// tack on the connection: closed as per HTTP/1.1
     strcat(content, "Connection: close\r\n");
     while (strcmp(buf, "\r\n")) {
-				if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) {
-					printf("error in the header's while loop\n");
-					return;
-				}
-				/* Get 'Content-Length:' */
+		if (Rio_readlineb_w(rp, buf, MAXLINE) <= 0) {
+			printf("error in the header's while loop\n");
+			return;
+		}
+		/* Get 'Content-Length:' */
         if (strncasecmp(buf, "Content-Length:", 15) == 0)
             *length = atoi(buf + 15);
         /* Get 'Transfer-Encoding: chunked' */
@@ -466,7 +458,7 @@ int parse_uri(char *uri, char *hostname, char *pathname, int *port)
 
     /* Extract the host name */
     host_start = uri + 7; // since "http://" is 7 characters
-		// locate the first occurrence of :, /, \r, \n or \0
+	// locate the first occurrence of :, /, \r, \n or \0
     host_finish = strpbrk(host_start, " :/\r\n\0");
     len = host_finish - host_start;
     strncpy(hostname, host_start, len);
@@ -493,7 +485,6 @@ int parse_uri(char *uri, char *hostname, char *pathname, int *port)
  * Parse chunked header - Get chunked length from header
 		Requires:
 			"chunked_header" points to a valid response header
-
 		Effects:
 			Reads in the header and adds the lengths the chunked header remakrs.
 			Returns the total length.
@@ -517,36 +508,31 @@ int parse_chunked_headers(char *chunked_header)
 
 /*
 	Rio_writen_w
-
 	The custom wrapper function for rio_writen
-
 	Requires:
 		The arguments are same as rio_writen
-
 	Effects:
 		Execute rio_writen using the given arguments and return the number of
 		bytes successfully written.
 */
 ssize_t Rio_writen_w(int fd, void *usrbuf, size_t n)
 {
-		if (fd < 0) {
-			printf("Corrupt file descriptor: %d\n", fd);
-			return (-1);
-		}
+	if (fd < 0) {
+		printf("Corrupt file descriptor: %d\n", fd);
+		return (-1);
+	}
 		printf("Rio_writen_w fd: %d\n", fd);
     if (rio_writen(fd, usrbuf, n) != (long)n) {
         fprintf(stderr, "Rio_writen_w error: %s\n", strerror(errno));
 				return (-1);
-		}
-		return n;
+	}
+	return n;
 }
 
 /*
 	Custom rio_readnb wrapper function
-
 	Requires:
 		Arguments are valid for rio_readnb
-
 	Effects:
 		Execute rio_readnb and return number of bytes successfully read
 */
@@ -563,10 +549,8 @@ ssize_t Rio_readnb_w(rio_t *rp, void *usrbuf, size_t n)
 
 /*
 	Custom rio_readlineb wrapper function
-
 	Requires:
 		Arguments are valid for rio_readlineb
-
 	Effects:
 		Execute rio_readlineb and return number of bytes successfully read
 */
@@ -610,7 +594,7 @@ int open_clientfd_ts(char *hostname, int port)
     bzero((char *) &serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
     bcopy((char *)hp->h_addr_list[0],
-      (char *)&serveraddr.sin_addr.s_addr, hp->h_length);
+    (char *)&serveraddr.sin_addr.s_addr, hp->h_length);
     serveraddr.sin_port = htons(port);
     free(hp);
 
@@ -647,15 +631,13 @@ create_log_entry(const struct sockaddr_in *sockaddr, const char *uri, int size)
 
 	/* Get a formatted time string. */
 	time_t now = time(NULL);
-	int log_strlen = strftime(log_str, MAXLINE, "%a %d %b %Y %H:%M:%S %Z: ",
-	    localtime(&now));
+	int log_strlen = strftime(log_str, MAXLINE, "%a %d %b %Y %H:%M:%S %Z: ", localtime(&now));
 
 	/*
 	 * Convert the IP address in network byte order to dotted decimal
 	 * form.
 	 */
-	Inet_ntop(AF_INET, &sockaddr->sin_addr, &log_str[log_strlen],
-	    INET_ADDRSTRLEN);
+	Inet_ntop(AF_INET, &sockaddr->sin_addr, &log_str[log_strlen], INET_ADDRSTRLEN);
 	log_strlen += strlen(&log_str[log_strlen]);
 
 	/*
@@ -667,8 +649,7 @@ create_log_entry(const struct sockaddr_in *sockaddr, const char *uri, int size)
 	/*
 	 * Add the URI and response size onto the end of the log entry.
 	 */
-	snprintf(&log_str[log_strlen], log_maxlen - log_strlen, " %s %d", uri,
-	    size);
+	snprintf(&log_str[log_strlen], log_maxlen - log_strlen, " %s %d", uri, size);
 
 	return (log_str);
 }
@@ -676,7 +657,6 @@ create_log_entry(const struct sockaddr_in *sockaddr, const char *uri, int size)
 /*
 	Requires:
 		"newelem" is a legitimate string
-
  	Effects:
 		Create a singly linked list with only the specified element as the entry
  */
@@ -694,7 +674,6 @@ struct List* list_create(void)
 	Requires:
 		"lp" must point to a valid list.
 		"newelem" must point to a valid dynamically allocated string.
-
 	Effects:
 		Insert a new element containing string to the end of the list.
 */
@@ -720,10 +699,8 @@ void list_insert(struct List* lp, char* newelem)
 
 /*
 	List destruction
-
 	Requires:
 		"lp" points to a valid dynamically constructed struct List
-
 	Effects:
 		Frees the variables involved including the list itself.
 */
@@ -743,15 +720,12 @@ void list_destroy(struct List* lp)
 
 /*
 	Total string concatenation
-
 	Requires:
 		"lp" must point to a valid list of the type struct List
-
 	Effects:
 		Iterates over the list and concatenates the whole list into
 		one big string. This is our proposed solution for handling
 		exceptionally long request strings.
-
 */
 
 char* list_totalstring(struct List* lp)
